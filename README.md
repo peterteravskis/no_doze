@@ -4,7 +4,7 @@
 
 NoDoze is a tiny Swift-only macOS app for keeping your Mac awake during AI agent computer use, browser automation, desktop automation, long-running local coding agents, and other unattended workflows.
 
-It is basically a friendly one-button GUI for `caffeinate`, with one extra practical touch for AI agents: it also disables the screen saver while running, then restores your previous screen saver behavior when stopped.
+It is basically a friendly one-button GUI for `caffeinate`, with a few extra practical touches for AI agents: it also disables the screen saver while running, can stop itself on a timer or at a wall-clock time, then restores your previous screen saver behavior when stopped.
 
 ## Why This Exists
 
@@ -16,6 +16,8 @@ NoDoze is meant for those moments:
 - prevent sleep during Codex, local coding agent, or automation sessions
 - prevent the macOS screen saver from interrupting desktop automation
 - run `caffeinate` from a simple Start/Stop app instead of a Terminal window
+- set an optional stop timer or wall-clock stop before starting
+- control NoDoze from the menu bar after closing the window
 - restore the previous screen saver setting when you stop or quit
 
 ## Behavior
@@ -23,8 +25,9 @@ NoDoze is meant for those moments:
 Start:
 - launches `/usr/bin/caffeinate -dimsu -w <app-pid>`
 - disables the current-host screen saver idle timer
+- arms the optional stop timer and wall-clock stop, if enabled
 
-Stop or quit:
+Stop, automatic stop, or quit:
 - terminates `caffeinate`
 - restores the previous screen saver idle timer
 

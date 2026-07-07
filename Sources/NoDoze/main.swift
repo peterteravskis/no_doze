@@ -2,13 +2,6 @@ import AppKit
 import CoreFoundation
 import Foundation
 
-private let chronoOrange = NSColor(calibratedRed: 0.98, green: 0.39, blue: 0.06, alpha: 1.0)
-private let chronoAmber = NSColor(calibratedRed: 1.0, green: 0.64, blue: 0.18, alpha: 1.0)
-private let chronoBlack = NSColor(calibratedWhite: 0.08, alpha: 1.0)
-private let chronoDarkGray = NSColor(calibratedWhite: 0.18, alpha: 1.0)
-private let chronoMidGray = NSColor(calibratedWhite: 0.38, alpha: 1.0)
-private let chronoTextGray = NSColor(calibratedWhite: 0.72, alpha: 1.0)
-
 enum NoDozeError: LocalizedError {
     case preferenceSyncFailed
     case caffeinateUnavailable
@@ -51,17 +44,23 @@ private enum IconGlyph {
             )
             NSBezierPath(roundedRect: square, xRadius: side * 0.12, yRadius: side * 0.12).fill()
         case .timer:
-            let bodyRect = rect.insetBy(dx: rect.width * 0.16, dy: rect.height * 0.2)
+            let side = min(rect.width, rect.height) * 0.68
+            let bodyRect = NSRect(
+                x: rect.midX - side / 2,
+                y: rect.minY + rect.height * 0.18,
+                width: side,
+                height: side
+            )
             let body = NSBezierPath(ovalIn: bodyRect)
             body.lineWidth = lineWidth
             body.stroke()
 
-            let crownWidth = rect.width * 0.24
+            let crownWidth = side * 0.36
             let crownRect = NSRect(
                 x: rect.midX - crownWidth / 2,
                 y: bodyRect.maxY - lineWidth / 2,
                 width: crownWidth,
-                height: rect.height * 0.12
+                height: side * 0.18
             )
             NSBezierPath(roundedRect: crownRect, xRadius: 2, yRadius: 2).fill()
 
@@ -93,16 +92,8 @@ private enum IconGlyph {
 
 private final class BackgroundView: NSView {
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(calibratedWhite: 0.92, alpha: 1.0).setFill()
+        NSColor.windowBackgroundColor.setFill()
         dirtyRect.fill()
-
-        let topBand = NSRect(x: 0, y: bounds.height - 82, width: bounds.width, height: 82)
-        chronoBlack.withAlphaComponent(0.94).setFill()
-        topBand.fill()
-
-        let accent = NSRect(x: 0, y: bounds.height - 84, width: bounds.width, height: 2)
-        chronoOrange.setFill()
-        accent.fill()
     }
 }
 
@@ -111,19 +102,11 @@ private final class ChronometerPanelView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
-        let path = NSBezierPath(roundedRect: rect, xRadius: 14, yRadius: 14)
-        chronoBlack.setFill()
+        let path = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
+        NSColor.controlBackgroundColor.setFill()
         path.fill()
 
-        let topStrip = NSBezierPath(
-            roundedRect: NSRect(x: rect.minX + 1, y: rect.minY + 1, width: rect.width - 2, height: 26),
-            xRadius: 13,
-            yRadius: 13
-        )
-        chronoDarkGray.setFill()
-        topStrip.fill()
-
-        chronoMidGray.setStroke()
+        NSColor.separatorColor.setStroke()
         path.lineWidth = 1
         path.stroke()
     }
@@ -146,19 +129,19 @@ private final class BadgeIconView: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 46, height: 46)
+        NSSize(width: 40, height: 40)
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let circleRect = bounds.insetBy(dx: 3, dy: 3)
+        let circleRect = bounds.insetBy(dx: 2, dy: 2)
         let circle = NSBezierPath(ovalIn: circleRect)
-        chronoDarkGray.setFill()
+        NSColor.controlBackgroundColor.setFill()
         circle.fill()
-        chronoOrange.setStroke()
-        circle.lineWidth = 1.5
+        NSColor.separatorColor.setStroke()
+        circle.lineWidth = 1
         circle.stroke()
 
-        glyph.draw(in: circleRect.insetBy(dx: 9, dy: 9), color: chronoAmber, lineWidth: 2.2)
+        glyph.draw(in: circleRect.insetBy(dx: 8, dy: 8), color: .controlAccentColor, lineWidth: 2.1)
     }
 }
 
@@ -185,7 +168,7 @@ private final class CircleIconButton: NSButton {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 92, height: 92)
+        NSSize(width: 78, height: 78)
     }
 
     private func commonInit() {
@@ -226,34 +209,26 @@ private final class CircleIconButton: NSButton {
 
     override func draw(_ dirtyRect: NSRect) {
         let highlighted = cell?.isHighlighted == true
-        let circleRect = bounds.insetBy(dx: 5, dy: 5)
+        let circleRect = bounds.insetBy(dx: 4, dy: 4)
         let circle = NSBezierPath(ovalIn: circleRect)
-
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowBlurRadius = highlighted ? 3 : 7
-        shadow.shadowOffset = NSSize(width: 0, height: -2)
-        shadow.shadowColor = NSColor.black.withAlphaComponent(activeStyle ? 0.28 : 0.18)
-        shadow.set()
 
         let fillColor: NSColor
         if activeStyle {
-            fillColor = highlighted ? chronoAmber : chronoOrange
+            fillColor = highlighted ? .selectedControlColor : .controlAccentColor
         } else if isHovering || highlighted {
-            fillColor = chronoDarkGray
+            fillColor = .unemphasizedSelectedContentBackgroundColor
         } else {
-            fillColor = chronoBlack
+            fillColor = .controlBackgroundColor
         }
         fillColor.setFill()
         circle.fill()
-        NSGraphicsContext.restoreGraphicsState()
 
-        (activeStyle ? chronoBlack : chronoOrange).setStroke()
-        circle.lineWidth = 2
+        (activeStyle ? NSColor.controlAccentColor : NSColor.separatorColor).setStroke()
+        circle.lineWidth = activeStyle ? 1.5 : 1
         circle.stroke()
 
-        let iconColor = activeStyle ? chronoBlack : chronoAmber
-        glyph.draw(in: circleRect.insetBy(dx: 25, dy: 25), color: iconColor, lineWidth: 2.5)
+        let iconColor = activeStyle ? NSColor.selectedControlTextColor : NSColor.controlAccentColor
+        glyph.draw(in: circleRect.insetBy(dx: 22, dy: 22), color: iconColor, lineWidth: 2.3)
     }
 }
 
@@ -502,22 +477,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSText
     }
 
     private func configureWindow() {
-        titleLabel.font = .systemFont(ofSize: 26, weight: .semibold)
-        titleLabel.textColor = .white
+        titleLabel.font = .systemFont(ofSize: 24, weight: .semibold)
+        titleLabel.textColor = .labelColor
         titleLabel.alignment = .center
 
         statusLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        statusLabel.textColor = chronoAmber
+        statusLabel.textColor = .secondaryLabelColor
         statusLabel.alignment = .center
 
         detailLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
-        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.textColor = .tertiaryLabelColor
         detailLabel.alignment = .center
 
         powerButton.target = self
         powerButton.action = #selector(toggle)
-        powerButton.widthAnchor.constraint(equalToConstant: 92).isActive = true
-        powerButton.heightAnchor.constraint(equalToConstant: 92).isActive = true
+        powerButton.widthAnchor.constraint(equalToConstant: 78).isActive = true
+        powerButton.heightAnchor.constraint(equalToConstant: 78).isActive = true
 
         configureDurationControls()
         configureWallClockControls()
@@ -533,26 +508,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSText
         ])
         timerStack.orientation = .vertical
         timerStack.alignment = .centerX
-        timerStack.spacing = 10
+        timerStack.spacing = 8
 
         let stack = NSStackView(views: [headerStack, powerButton, detailLabel, timerStack])
         stack.orientation = .vertical
         stack.alignment = .centerX
-        stack.spacing = 16
+        stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         let contentView = BackgroundView()
         contentView.addSubview(stack)
 
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 22),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 24),
             stack.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             stack.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 24),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -24)
         ])
 
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 430),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 390),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -580,14 +555,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSText
         durationField.delegate = self
         durationField.alignment = .right
         durationField.font = .monospacedDigitSystemFont(ofSize: 18, weight: .semibold)
-        durationField.textColor = chronoAmber
-        durationField.backgroundColor = chronoDarkGray
+        durationField.textColor = .labelColor
+        durationField.backgroundColor = .textBackgroundColor
         durationField.drawsBackground = true
-        durationField.isBezeled = false
+        durationField.isBezeled = true
+        durationField.bezelStyle = .roundedBezel
         durationField.focusRingType = .none
         durationField.translatesAutoresizingMaskIntoConstraints = false
-        durationField.widthAnchor.constraint(equalToConstant: 58).isActive = true
-        durationField.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        durationField.widthAnchor.constraint(equalToConstant: 56).isActive = true
+        durationField.heightAnchor.constraint(equalToConstant: 26).isActive = true
 
         durationStepper.minValue = 1
         durationStepper.maxValue = 1_440
@@ -606,26 +582,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSText
         wallClockPicker.datePickerStyle = .textFieldAndStepper
         wallClockPicker.dateValue = Date().addingTimeInterval(60 * 60)
         wallClockPicker.font = .monospacedDigitSystemFont(ofSize: 18, weight: .semibold)
-        wallClockPicker.textColor = chronoAmber
-        wallClockPicker.backgroundColor = chronoDarkGray
+        wallClockPicker.textColor = .labelColor
+        wallClockPicker.backgroundColor = .textBackgroundColor
         wallClockPicker.drawsBackground = true
-        wallClockPicker.isBezeled = false
+        wallClockPicker.isBezeled = true
         wallClockPicker.target = self
         wallClockPicker.action = #selector(timerControlChanged)
         wallClockPicker.translatesAutoresizingMaskIntoConstraints = false
         wallClockPicker.widthAnchor.constraint(equalToConstant: 112).isActive = true
-        wallClockPicker.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        wallClockPicker.heightAnchor.constraint(equalToConstant: 26).isActive = true
     }
 
     private func styleCheckbox(_ checkbox: NSButton) {
         checkbox.font = .systemFont(ofSize: 13, weight: .semibold)
-        checkbox.attributedTitle = NSAttributedString(
-            string: checkbox.title,
-            attributes: [
-                .foregroundColor: NSColor(calibratedWhite: 0.90, alpha: 1.0),
-                .font: NSFont.systemFont(ofSize: 13, weight: .semibold)
-            ]
-        )
+        checkbox.contentTintColor = .controlAccentColor
     }
 
     private func makeTimerPanel(
@@ -638,31 +608,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSText
         panel.translatesAutoresizingMaskIntoConstraints = false
 
         let iconView = BadgeIconView(glyph: icon)
-        iconView.widthAnchor.constraint(equalToConstant: 46).isActive = true
-        iconView.heightAnchor.constraint(equalToConstant: 46).isActive = true
+        iconView.widthAnchor.constraint(equalToConstant: 40).isActive = true
+        iconView.heightAnchor.constraint(equalToConstant: 40).isActive = true
 
         summaryLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-        summaryLabel.textColor = chronoTextGray
+        summaryLabel.textColor = .secondaryLabelColor
         summaryLabel.alignment = .left
 
         let textStack = NSStackView(views: [checkbox, controlRow, summaryLabel])
         textStack.orientation = .vertical
         textStack.alignment = .left
-        textStack.spacing = 4
+        textStack.spacing = 3
 
         let row = NSStackView(views: [iconView, textStack])
         row.orientation = .horizontal
         row.alignment = .centerY
-        row.spacing = 14
+        row.spacing = 12
         row.translatesAutoresizingMaskIntoConstraints = false
 
         panel.addSubview(row)
 
         NSLayoutConstraint.activate([
-            panel.widthAnchor.constraint(equalToConstant: 360),
-            panel.heightAnchor.constraint(equalToConstant: 92),
-            row.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 16),
-            row.trailingAnchor.constraint(lessThanOrEqualTo: panel.trailingAnchor, constant: -16),
+            panel.widthAnchor.constraint(equalToConstant: 340),
+            panel.heightAnchor.constraint(equalToConstant: 82),
+            row.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 14),
+            row.trailingAnchor.constraint(lessThanOrEqualTo: panel.trailingAnchor, constant: -14),
             row.centerYAnchor.constraint(equalTo: panel.centerYAnchor)
         ])
 
@@ -689,7 +659,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSText
     private func makePanelLabel(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
         label.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
-        label.textColor = chronoTextGray
+        label.textColor = .secondaryLabelColor
         return label
     }
 
@@ -840,7 +810,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSText
         powerButton.setAccessibilityLabel(active ? "Stop NoDoze" : "Start NoDoze")
 
         statusLabel.stringValue = active ? "Running" : lastStatusText
-        detailLabel.stringValue = detailText()
+        statusLabel.textColor = active ? .controlAccentColor : .secondaryLabelColor
+
+        let detail = detailText()
+        detailLabel.stringValue = detail
+        detailLabel.isHidden = detail.isEmpty
 
         refreshTimerSummaries()
         refreshControlStates()
@@ -850,18 +824,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSText
     private func refreshTimerSummaries() {
         if durationCheckbox.state == .on {
             durationSummaryLabel.stringValue = "After \(durationMinutes()) min"
-            durationSummaryLabel.textColor = chronoAmber
+            durationSummaryLabel.textColor = .controlAccentColor
         } else {
             durationSummaryLabel.stringValue = "Disabled"
-            durationSummaryLabel.textColor = chronoTextGray
+            durationSummaryLabel.textColor = .secondaryLabelColor
         }
 
         if wallClockCheckbox.state == .on {
             wallClockSummaryLabel.stringValue = wallClockSummaryText()
-            wallClockSummaryLabel.textColor = chronoAmber
+            wallClockSummaryLabel.textColor = .controlAccentColor
         } else {
             wallClockSummaryLabel.stringValue = "Disabled"
-            wallClockSummaryLabel.textColor = chronoTextGray
+            wallClockSummaryLabel.textColor = .secondaryLabelColor
         }
     }
 
@@ -896,7 +870,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSText
             return "Timer armed for next start"
         }
 
-        return "Timers off"
+        return ""
     }
 
     private func menuTimerText() -> String {
@@ -942,18 +916,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSText
         let image = NSImage(size: size, flipped: false) { rect in
             let circleRect = rect.insetBy(dx: 1.5, dy: 1.5)
             let circle = NSBezierPath(ovalIn: circleRect)
-            (active ? chronoOrange : chronoBlack).setFill()
+            (active ? NSColor.controlAccentColor : NSColor.clear).setFill()
             circle.fill()
 
-            let strokeColor = active ? chronoBlack : chronoOrange
-            strokeColor.setStroke()
+            (active ? NSColor.controlAccentColor : NSColor.labelColor).setStroke()
             circle.lineWidth = 1.4
             circle.stroke()
 
             let glyphRect = circleRect.insetBy(dx: 4.8, dy: 4.8)
             (active ? IconGlyph.stop : IconGlyph.play).draw(
                 in: glyphRect,
-                color: active ? chronoBlack : chronoAmber,
+                color: active ? .selectedControlTextColor : .labelColor,
                 lineWidth: 1.8
             )
             return true

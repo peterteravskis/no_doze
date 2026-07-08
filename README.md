@@ -53,6 +53,12 @@ Stop, automatic stop, or quit:
 - terminates `caffeinate`
 - restores the previous screen saver idle timer
 
+Interrupted previous run:
+
+- shows a NoDoze-styled restore prompt on next launch
+- displays the current screen saver idle timer beside the saved prior value
+- lets you restore the saved value or keep the current setting
+
 NoDoze uses the current user's current-host screen saver preference only. It does not install a background service.
 
 ## Build

@@ -927,21 +927,446 @@ private final class CircleIconButton: NSButton {
     }
 }
 
+private final class RecoverySettingView: NSView {
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let valueLabel = NSTextField(labelWithString: "")
+    private let detailLabel = NSTextField(labelWithString: "")
+
+    init(title: String, value: String, detail: String) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        setupLabels(title: title, value: value, detail: detail)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: 160, height: 84)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
+        NSColor.controlBackgroundColor.setFill()
+        path.fill()
+        NSColor.separatorColor.setStroke()
+        path.lineWidth = 1
+        path.stroke()
+    }
+
+    private func setupLabels(title: String, value: String, detail: String) {
+        titleLabel.stringValue = title
+        titleLabel.font = .systemFont(ofSize: 10, weight: .medium)
+        titleLabel.textColor = .tertiaryLabelColor
+        titleLabel.alignment = .left
+        titleLabel.lineBreakMode = .byTruncatingTail
+
+        valueLabel.stringValue = value
+        valueLabel.font = fittingSystemFont(
+            for: value,
+            maxWidth: 128,
+            baseSize: 19,
+            weight: .semibold,
+            minSize: 13
+        )
+        valueLabel.textColor = .labelColor
+        valueLabel.alignment = .left
+        valueLabel.lineBreakMode = .byTruncatingTail
+
+        detailLabel.stringValue = detail
+        detailLabel.font = .systemFont(ofSize: 11, weight: .regular)
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.alignment = .left
+        detailLabel.maximumNumberOfLines = 2
+        detailLabel.lineBreakMode = .byWordWrapping
+
+        let stack = NSStackView(views: [titleLabel, valueLabel, detailLabel])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: 160),
+            heightAnchor.constraint(equalToConstant: 84),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+}
+
+private final class RecoveryActionButton: NSButton {
+    var emphasized = false {
+        didSet { needsDisplay = true }
+    }
+
+    private var isHovering = false
+    private var hoverTrackingArea: NSTrackingArea?
+
+    init(title: String, emphasized: Bool) {
+        self.emphasized = emphasized
+        super.init(frame: .zero)
+        self.title = title
+        commonInit()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: 128, height: 34)
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .inVisibleRect, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        hoverTrackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+        needsDisplay = true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == " " || event.keyCode == 36 {
+            performClick(nil)
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let highlighted = cell?.isHighlighted == true
+        let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
+
+        let fillColor: NSColor
+        let strokeColor: NSColor
+        let textColor: NSColor
+        if emphasized {
+            fillColor = highlighted ? appAccentColor.withAlphaComponent(0.82) : appAccentColor
+            strokeColor = fillColor
+            textColor = .white
+        } else {
+            fillColor = isHovering || highlighted ? .unemphasizedSelectedContentBackgroundColor : .controlBackgroundColor
+            strokeColor = .separatorColor
+            textColor = .labelColor
+        }
+
+        fillColor.setFill()
+        path.fill()
+        strokeColor.setStroke()
+        path.lineWidth = emphasized ? 0 : 1
+        path.stroke()
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: emphasized ? .semibold : .regular),
+            .foregroundColor: textColor,
+            .paragraphStyle: paragraph
+        ]
+        let attributedTitle = NSAttributedString(string: title, attributes: attributes)
+        let textRect = NSRect(
+            x: bounds.minX + 8,
+            y: bounds.midY - attributedTitle.size().height / 2,
+            width: bounds.width - 16,
+            height: attributedTitle.size().height
+        )
+        attributedTitle.draw(in: textRect)
+    }
+
+    private func commonInit() {
+        isBordered = false
+        setButtonType(.momentaryChange)
+        focusRingType = .none
+        translatesAutoresizingMaskIntoConstraints = false
+        setAccessibilityRole(.button)
+    }
+}
+
+private enum RecoveryChoice {
+    case restore
+    case keepCurrent
+}
+
+private final class ScreenSaverRecoverySheetController: NSWindowController {
+    private let currentState: ScreenSaverIdleState
+    private let restoreState: ScreenSaverIdleState
+    private var completion: ((RecoveryChoice) -> Void)?
+
+    init(
+        currentState: ScreenSaverIdleState,
+        restoreState: ScreenSaverIdleState,
+        completion: @escaping (RecoveryChoice) -> Void
+    ) {
+        self.currentState = currentState
+        self.restoreState = restoreState
+        self.completion = completion
+
+        let sheetWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 444, height: 300),
+            styleMask: [.titled, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        sheetWindow.title = "NoDoze"
+        sheetWindow.titleVisibility = .hidden
+        sheetWindow.titlebarAppearsTransparent = true
+        sheetWindow.isReleasedWhenClosed = false
+        sheetWindow.backgroundColor = .windowBackgroundColor
+
+        super.init(window: sheetWindow)
+
+        sheetWindow.standardWindowButton(.closeButton)?.isHidden = true
+        sheetWindow.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        sheetWindow.standardWindowButton(.zoomButton)?.isHidden = true
+        sheetWindow.contentView = makeContentView()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc override func cancelOperation(_ sender: Any?) {
+        finish(.keepCurrent)
+    }
+
+    @objc private func restoreSetting() {
+        finish(.restore)
+    }
+
+    @objc private func keepCurrent() {
+        finish(.keepCurrent)
+    }
+
+    private func makeContentView() -> NSView {
+        let contentView = BackgroundView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+
+        let icon = NSImageView()
+        icon.image = NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: "Restore")
+        icon.contentTintColor = appAccentColor
+        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 22, weight: .semibold)
+        icon.translatesAutoresizingMaskIntoConstraints = false
+
+        let iconRing = NSView()
+        iconRing.translatesAutoresizingMaskIntoConstraints = false
+        iconRing.wantsLayer = true
+        iconRing.layer?.cornerRadius = 22
+        iconRing.layer?.borderWidth = 1
+        iconRing.layer?.borderColor = appAccentColor.withAlphaComponent(0.45).cgColor
+        iconRing.layer?.backgroundColor = appAccentColor.withAlphaComponent(0.10).cgColor
+        iconRing.addSubview(icon)
+
+        let titleLabel = NSTextField(labelWithString: "Restore screen saver setting?")
+        titleLabel.font = .systemFont(ofSize: 19, weight: .semibold)
+        titleLabel.textColor = .labelColor
+        titleLabel.alignment = .center
+
+        let bodyLabel = NSTextField(labelWithString: "NoDoze stopped before it could restore the current-user, current-host screen saver idle timer.")
+        bodyLabel.font = .systemFont(ofSize: 12, weight: .regular)
+        bodyLabel.textColor = .secondaryLabelColor
+        bodyLabel.alignment = .center
+        bodyLabel.maximumNumberOfLines = 2
+        bodyLabel.lineBreakMode = .byWordWrapping
+
+        let currentView = RecoverySettingView(
+            title: "CURRENT",
+            value: currentState.shortDescription,
+            detail: currentState.detailDescription
+        )
+        let restoreView = RecoverySettingView(
+            title: "RESTORE TO",
+            value: restoreState.shortDescription,
+            detail: restoreState.detailDescription
+        )
+
+        let arrow = NSImageView()
+        arrow.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
+        arrow.contentTintColor = .tertiaryLabelColor
+        arrow.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+        arrow.translatesAutoresizingMaskIntoConstraints = false
+
+        let settingStack = NSStackView(views: [currentView, arrow, restoreView])
+        settingStack.orientation = .horizontal
+        settingStack.alignment = .centerY
+        settingStack.spacing = 12
+        settingStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let keepButton = RecoveryActionButton(title: "Keep Current", emphasized: false)
+        keepButton.target = self
+        keepButton.action = #selector(keepCurrent)
+
+        let restoreButton = RecoveryActionButton(title: "Restore", emphasized: true)
+        restoreButton.target = self
+        restoreButton.action = #selector(restoreSetting)
+
+        let buttonStack = NSStackView(views: [keepButton, restoreButton])
+        buttonStack.orientation = .horizontal
+        buttonStack.alignment = .centerY
+        buttonStack.spacing = 10
+        buttonStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = NSStackView(views: [iconRing, titleLabel, bodyLabel, settingStack, buttonStack])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.setCustomSpacing(8, after: titleLabel)
+        stack.setCustomSpacing(16, after: bodyLabel)
+        stack.setCustomSpacing(18, after: settingStack)
+        contentView.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            iconRing.widthAnchor.constraint(equalToConstant: 44),
+            iconRing.heightAnchor.constraint(equalToConstant: 44),
+            icon.centerXAnchor.constraint(equalTo: iconRing.centerXAnchor),
+            icon.centerYAnchor.constraint(equalTo: iconRing.centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 24),
+            icon.heightAnchor.constraint(equalToConstant: 24),
+            arrow.widthAnchor.constraint(equalToConstant: 18),
+            arrow.heightAnchor.constraint(equalToConstant: 18),
+            keepButton.widthAnchor.constraint(equalToConstant: 126),
+            keepButton.heightAnchor.constraint(equalToConstant: 34),
+            restoreButton.widthAnchor.constraint(equalToConstant: 126),
+            restoreButton.heightAnchor.constraint(equalToConstant: 34),
+            bodyLabel.widthAnchor.constraint(equalToConstant: 348),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 18),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 18),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -18),
+            stack.centerXAnchor.constraint(equalTo: contentView.centerXAnchor)
+        ])
+
+        window?.defaultButtonCell = restoreButton.cell as? NSButtonCell
+        return contentView
+    }
+
+    private func finish(_ choice: RecoveryChoice) {
+        let callback = completion
+        completion = nil
+
+        if let sheet = window, let parent = sheet.sheetParent {
+            parent.endSheet(sheet)
+        } else {
+            window?.close()
+        }
+
+        callback?(choice)
+    }
+}
+
+private struct ScreenSaverIdleState {
+    let wasSet: Bool
+    let seconds: Int?
+
+    var needsCrashRecovery: Bool {
+        !wasSet || seconds != 0
+    }
+
+    var preferenceValue: CFPropertyList? {
+        guard wasSet, let seconds else { return nil }
+        return NSNumber(value: seconds)
+    }
+
+    var shortDescription: String {
+        guard wasSet, let seconds else {
+            return "System Default"
+        }
+
+        guard seconds > 0 else {
+            return "Disabled"
+        }
+
+        return durationDescription(for: seconds)
+    }
+
+    var detailDescription: String {
+        guard wasSet, let seconds else {
+            return "No current-host idle timer value is set."
+        }
+
+        guard seconds > 0 else {
+            return "The screen saver idle timer is off."
+        }
+
+        return "Starts after \(durationDescription(for: seconds).lowercased())."
+    }
+
+    private func durationDescription(for seconds: Int) -> String {
+        if seconds % 3_600 == 0 {
+            let hours = seconds / 3_600
+            return "\(hours) hour\(hours == 1 ? "" : "s")"
+        }
+
+        if seconds % 60 == 0 {
+            let minutes = seconds / 60
+            return "\(minutes) minute\(minutes == 1 ? "" : "s")"
+        }
+
+        return "\(seconds) second\(seconds == 1 ? "" : "s")"
+    }
+}
+
+private struct ScreenSaverRecoveryDetails {
+    let currentState: ScreenSaverIdleState
+    let restoreState: ScreenSaverIdleState
+}
+
 final class ScreenSaverController {
     private let domain = "com.apple.screensaver" as CFString
     private let key = "idleTime" as CFString
-    private var savedIdleTime: CFPropertyList?
+    private let defaults = UserDefaults.standard
+    private let pendingRestoreKey = "ScreenSaverIdleTimerRestorePending"
+    private let savedIdleTimeWasSetKey = "ScreenSaverIdleTimerWasSet"
+    private let savedIdleTimeSecondsKey = "ScreenSaverIdleTimerSeconds"
+    private var savedIdleState: ScreenSaverIdleState?
     private var captured = false
+
+    fileprivate var pendingRestoreDetails: ScreenSaverRecoveryDetails? {
+        guard let restoreState = pendingRestoreState() else { return nil }
+        guard restoreState.needsCrashRecovery else {
+            clearPersistentRestore()
+            return nil
+        }
+
+        return ScreenSaverRecoveryDetails(
+            currentState: currentIdleState(),
+            restoreState: restoreState
+        )
+    }
 
     func disable() throws {
         if !captured {
-            savedIdleTime = CFPreferencesCopyValue(
-                key,
-                domain,
-                kCFPreferencesCurrentUser,
-                kCFPreferencesCurrentHost
-            )
+            let state = currentIdleState()
+            savedIdleState = state
             captured = true
+            persistPendingRestore(state)
         }
 
         CFPreferencesSetValue(
@@ -962,11 +1387,49 @@ final class ScreenSaverController {
     }
 
     func restore() throws {
-        guard captured else { return }
+        guard captured, let savedIdleState else { return }
 
+        try apply(savedIdleState)
+        clearCurrentRestoreState()
+    }
+
+    func restorePendingInterruptedState() throws {
+        guard let state = pendingRestoreState() else {
+            clearPersistentRestore()
+            return
+        }
+
+        try apply(state)
+        clearPersistentRestore()
+    }
+
+    func discardPendingInterruptedState() {
+        clearPersistentRestore()
+    }
+
+    private func currentIdleState() -> ScreenSaverIdleState {
+        let currentValue = CFPreferencesCopyValue(
+            key,
+            domain,
+            kCFPreferencesCurrentUser,
+            kCFPreferencesCurrentHost
+        )
+
+        guard let currentValue else {
+            return ScreenSaverIdleState(wasSet: false, seconds: nil)
+        }
+
+        guard let idleTime = currentValue as? NSNumber else {
+            return ScreenSaverIdleState(wasSet: false, seconds: nil)
+        }
+
+        return ScreenSaverIdleState(wasSet: true, seconds: idleTime.intValue)
+    }
+
+    private func apply(_ state: ScreenSaverIdleState) throws {
         CFPreferencesSetValue(
             key,
-            savedIdleTime,
+            state.preferenceValue,
             domain,
             kCFPreferencesCurrentUser,
             kCFPreferencesCurrentHost
@@ -979,9 +1442,45 @@ final class ScreenSaverController {
         ) else {
             throw NoDozeError.preferenceSyncFailed
         }
+    }
 
-        savedIdleTime = nil
+    private func persistPendingRestore(_ state: ScreenSaverIdleState) {
+        defaults.set(true, forKey: pendingRestoreKey)
+        defaults.set(state.wasSet, forKey: savedIdleTimeWasSetKey)
+
+        if let seconds = state.seconds {
+            defaults.set(seconds, forKey: savedIdleTimeSecondsKey)
+        } else {
+            defaults.removeObject(forKey: savedIdleTimeSecondsKey)
+        }
+
+        defaults.synchronize()
+    }
+
+    private func pendingRestoreState() -> ScreenSaverIdleState? {
+        guard defaults.bool(forKey: pendingRestoreKey) else { return nil }
+
+        let wasSet = defaults.bool(forKey: savedIdleTimeWasSetKey)
+        let seconds = defaults.object(forKey: savedIdleTimeSecondsKey) as? Int
+
+        if wasSet && seconds == nil {
+            return nil
+        }
+
+        return ScreenSaverIdleState(wasSet: wasSet, seconds: seconds)
+    }
+
+    private func clearCurrentRestoreState() {
+        savedIdleState = nil
         captured = false
+        clearPersistentRestore()
+    }
+
+    private func clearPersistentRestore() {
+        defaults.removeObject(forKey: pendingRestoreKey)
+        defaults.removeObject(forKey: savedIdleTimeWasSetKey)
+        defaults.removeObject(forKey: savedIdleTimeSecondsKey)
+        defaults.synchronize()
     }
 }
 
@@ -1067,6 +1566,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var active = false
     private var autoStopTimer: Timer?
     private var uiRefreshTimer: Timer?
+    private var recoverySheetController: ScreenSaverRecoverySheetController?
     private var autoStopDeadline: Date?
     private var autoStopReason: String?
     private var lastStatusText = "Ready"
@@ -1101,6 +1601,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.refreshUI()
             self.showAlert(message: "caffeinate stopped unexpectedly.")
         }
+
+        promptForInterruptedScreenSaverRestoreIfNeeded()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -1271,6 +1773,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         refreshUI()
+    }
+
+    private func promptForInterruptedScreenSaverRestoreIfNeeded() {
+        guard let details = screenSaver.pendingRestoreDetails else { return }
+
+        let sheetController = ScreenSaverRecoverySheetController(
+            currentState: details.currentState,
+            restoreState: details.restoreState
+        ) { [weak self] choice in
+            guard let self else { return }
+            self.recoverySheetController = nil
+
+            if choice == .restore {
+                do {
+                    try self.screenSaver.restorePendingInterruptedState()
+                    self.lastStatusText = "Restored"
+                    self.refreshUI()
+                } catch {
+                    self.showAlert(message: error.localizedDescription)
+                }
+            } else {
+                self.screenSaver.discardPendingInterruptedState()
+            }
+        }
+        recoverySheetController = sheetController
+
+        guard let sheetWindow = sheetController.window else { return }
+
+        if let window, window.isVisible {
+            window.beginSheet(sheetWindow)
+        } else {
+            sheetWindow.center()
+            sheetWindow.makeKeyAndOrderFront(nil)
+        }
     }
 
     private func configureDurationControls() {

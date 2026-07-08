@@ -922,7 +922,7 @@ private final class CircleIconButton: NSButton {
         circle.stroke()
 
         let iconInset = max(7, circleRect.width * 0.2)
-        let iconColor = activeStyle ? NSColor.selectedControlTextColor : appAccentColor
+        let iconColor = activeStyle ? NSColor.white : appAccentColor
         glyph.draw(in: circleRect.insetBy(dx: iconInset, dy: iconInset), color: iconColor, lineWidth: 1.2)
     }
 }
@@ -1713,7 +1713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let glyphRect = circleRect.insetBy(dx: 4.8, dy: 4.8)
             (active ? IconGlyph.stop : IconGlyph.play).draw(
                 in: glyphRect,
-                color: active ? .selectedControlTextColor : .secondaryLabelColor,
+                color: active ? .white : .secondaryLabelColor,
                 lineWidth: 1.8
             )
             return true

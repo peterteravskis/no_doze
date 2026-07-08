@@ -1,35 +1,59 @@
 # NoDoze
 
-![NoDoze app icon](Sources/NoDoze.png)
+<div align="center">
+  <img src="Sources/NoDoze.png" alt="NoDoze macOS keep awake app icon" width="104">
 
-NoDoze is a tiny Swift-only macOS app for keeping your Mac awake during AI agent computer use, browser automation, desktop automation, long-running local coding agents, and other unattended workflows.
+  <p><strong>A tiny macOS keep-awake app for AI agents, desktop automation, browser automation, and long-running local work.</strong></p>
 
-It is basically a friendly one-button GUI for `caffeinate`, with a few extra practical touches for AI agents: it also disables the screen saver while running, can stop itself on a timer or at a wall-clock time, then restores your previous screen saver behavior when stopped.
+  <img src="Resources/NoDoze-v1.1-screenshot.png" alt="NoDoze v1.1 macOS keep awake app with an armed wall-clock stop dial" width="900">
+</div>
+
+NoDoze is a small Swift/AppKit macOS app for keeping your Mac awake while coding agents, computer-use agents, tests, builds, browsers, and other unattended workflows are running.
+
+It is a polished GUI for `/usr/bin/caffeinate` with agent-friendly stop controls: a minute timer, a wall-clock stop dial, a menu bar status item, and screen saver handling that restores your previous setting when NoDoze stops.
 
 ## Why This Exists
 
 AI coding agents and computer-use agents often need a Mac to stay awake while they read files, control apps, run tests, use a browser, or wait on long builds. If the display sleeps, the screen saver starts, or the session locks, desktop automation can stall.
 
-NoDoze is meant for those moments:
+NoDoze is built for those moments:
 
 - keep a Mac awake for AI agent computer use
-- prevent sleep during Codex, local coding agent, or automation sessions
+- prevent Mac sleep during Codex, local coding agents, or automation sessions
 - prevent the macOS screen saver from interrupting desktop automation
-- run `caffeinate` from a simple Start/Stop app instead of a Terminal window
+- run `caffeinate` from a compact Start/Stop app instead of a Terminal window
 - set an optional stop timer or wall-clock stop before starting
-- control NoDoze from the menu bar after closing the window
-- restore the previous screen saver setting when you stop or quit
+- keep control available from the menu bar after closing the window
+- restore the previous screen saver setting on Stop or quit
+
+## What's New In v1.1
+
+NoDoze v1.1 is the first stable release of the new dial interface.
+
+- Compact three-dial layout for timer, start/stop, and wall-clock stop.
+- Editable timer text in the dial itself, including long durations over 60 minutes.
+- Natural timer editing: click to type, type shortcuts like `1:15`, or drag vertically in 5-minute steps.
+- Protected timer suffix so minute-interval timers keep the `:00` portion non-editable.
+- Wall-clock dial with 1-hour and 30-minute tick marks plus 15-minute intermediate positions.
+- Accurate digital wall-clock text to the minute, while the analog stop marker snaps to 15-minute intervals.
+- Mutually exclusive timer and wall-clock modes: one may be armed, or both may be off.
+- Timer countdown appears inside the timer dial while running.
+- Improved light and dark mode colors using AppKit dynamic system colors.
 
 ## Behavior
 
 Start:
+
 - launches `/usr/bin/caffeinate -dimsu -w <app-pid>`
 - disables the current-host screen saver idle timer
-- arms the optional stop timer and wall-clock stop, if enabled
+- arms the optional stop timer or wall-clock stop, if enabled
 
 Stop, automatic stop, or quit:
+
 - terminates `caffeinate`
 - restores the previous screen saver idle timer
+
+NoDoze uses the current user's current-host screen saver preference only. It does not install a background service.
 
 ## Build
 
@@ -51,13 +75,6 @@ codesign --verify --deep --strict dist/NoDoze.app
 open dist/NoDoze.app
 ```
 
-## Notes
-
-- This app changes only the current user's current-host screen saver idle timer.
-- NoDoze stores the previous screen saver idle setting before starting and restores it on Stop or quit.
-- The `-w <app-pid>` guard means `caffeinate` should not survive the app process.
-- The packaged `.app` in `dist/` is ignored by git. Rebuild it locally when needed.
-
 ## Privacy
 
 NoDoze has no telemetry, no analytics, no network calls, and no background service. It only starts `/usr/bin/caffeinate` and temporarily changes the current-host screen saver idle timer while running.
@@ -68,4 +85,4 @@ MIT
 
 ## Search Terms
 
-macOS keep awake app, Mac caffeinate GUI, prevent Mac sleep, disable screen saver temporarily, AI agent computer use, Codex computer use, local coding agent, desktop automation, browser automation, unattended Mac automation.
+macOS keep awake app, Mac caffeinate GUI, prevent Mac sleep, disable screen saver temporarily, AI agent computer use, Codex computer use, local coding agent, desktop automation, browser automation, unattended Mac automation, Swift AppKit caffeinate app.

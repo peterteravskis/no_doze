@@ -26,6 +26,7 @@ private func fittingSystemFont(
 enum NoDozeError: LocalizedError {
     case preferenceSyncFailed
     case caffeinateUnavailable
+    case pendingScreenSaverRecovery
 
     var errorDescription: String? {
         switch self {
@@ -33,6 +34,8 @@ enum NoDozeError: LocalizedError {
             return "Could not save the screen saver setting."
         case .caffeinateUnavailable:
             return "Could not find /usr/bin/caffeinate."
+        case .pendingScreenSaverRecovery:
+            return "Restore or keep the interrupted screen saver setting before starting NoDoze."
         }
     }
 }
@@ -1111,7 +1114,7 @@ private final class RecoveryActionButton: NSButton {
 }
 
 private enum RecoveryChoice {
-    case restore
+    case restore(ScreenSaverIdleState)
     case keepCurrent
 }
 
@@ -1158,7 +1161,7 @@ private final class ScreenSaverRecoverySheetController: NSWindowController {
     }
 
     @objc private func restoreSetting() {
-        finish(.restore)
+        finish(.restore(restoreState))
     }
 
     @objc private func keepCurrent() {
@@ -1361,7 +1364,18 @@ final class ScreenSaverController {
         )
     }
 
+    fileprivate var hasPendingInterruptedRestore: Bool {
+        pendingRestoreDetails != nil
+    }
+
     func disable() throws {
+        if let pendingState = pendingRestoreState() {
+            guard !pendingState.needsCrashRecovery else {
+                throw NoDozeError.pendingScreenSaverRecovery
+            }
+            clearPersistentRestore()
+        }
+
         if !captured {
             let state = currentIdleState()
             savedIdleState = state
@@ -1393,12 +1407,7 @@ final class ScreenSaverController {
         clearCurrentRestoreState()
     }
 
-    func restorePendingInterruptedState() throws {
-        guard let state = pendingRestoreState() else {
-            clearPersistentRestore()
-            return
-        }
-
+    fileprivate func restorePendingInterruptedState(_ state: ScreenSaverIdleState) throws {
         try apply(state)
         clearPersistentRestore()
     }
@@ -1785,9 +1794,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             self.recoverySheetController = nil
 
-            if choice == .restore {
+            if case .restore(let restoreState) = choice {
                 do {
-                    try self.screenSaver.restorePendingInterruptedState()
+                    try self.screenSaver.restorePendingInterruptedState(restoreState)
                     self.lastStatusText = "Restored"
                     self.refreshUI()
                 } catch {
@@ -1946,6 +1955,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func start() {
+        if let recoverySheetController {
+            recoverySheetController.window?.makeKeyAndOrderFront(nil)
+            lastStatusText = "Restore pending"
+            refreshUI()
+            return
+        }
+
+        if screenSaver.hasPendingInterruptedRestore {
+            promptForInterruptedScreenSaverRestoreIfNeeded()
+            lastStatusText = "Restore pending"
+            refreshUI()
+            return
+        }
+
         do {
             durationEditor.commitEditing()
             let configuredDeadline = nextConfiguredStopDeadline()

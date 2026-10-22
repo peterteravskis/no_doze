@@ -10,7 +10,7 @@
 
 NoDoze is a small Swift/AppKit macOS app for keeping your Mac awake while coding agents, computer-use agents, tests, builds, browsers, and other unattended workflows are running.
 
-It is a polished GUI for `/usr/bin/caffeinate` with agent-friendly stop controls: a minute timer, a wall-clock stop dial, a menu bar status item, and screen saver handling that restores your previous setting when NoDoze stops.
+It uses `/usr/bin/caffeinate` and a native macOS activity assertion, with a minute timer, a wall-clock stop dial, a menu bar status item, and screen saver handling that restores your previous setting when NoDoze stops.
 
 ## Why This Exists
 
@@ -26,7 +26,17 @@ NoDoze is built for those moments:
 - keep control available from the menu bar after closing the window
 - restore the previous screen saver setting on Stop or quit
 
-## What's New In v1.1
+## What's New In v1.2
+
+- Maintains a native user-activity assertion throughout the session on macOS 27. The previous `caffeinate -u` assertion expired after five seconds.
+- Renews activity every 15 seconds, including while a menu or dial is tracking input.
+- Stops and reports an error if macOS rejects activity renewal.
+- Fixes a rapid Stop/Start race where an old `caffeinate` exit callback could clear a newer session.
+- Keeps automatic stop timers active while menus are open.
+- Exposes the custom timer, stop dial, and switches to Accessibility, with working control actions.
+- Adds regression tests for activity renewal, process cleanup, and screen saver restoration.
+
+## Dial Interface (v1.1)
 
 NoDoze v1.1 is the first stable release of the new dial interface.
 
@@ -44,13 +54,15 @@ NoDoze v1.1 is the first stable release of the new dial interface.
 
 Start:
 
-- launches `/usr/bin/caffeinate -dimsu -w <app-pid>`
+- launches `/usr/bin/caffeinate -dims -w <app-pid>`
+- declares native user activity immediately and renews it every 15 seconds using `IOPMAssertionDeclareUserActivity`
 - disables the current-host screen saver idle timer
 - arms the optional stop timer or wall-clock stop, if enabled
 
 Stop, automatic stop, or quit:
 
 - terminates `caffeinate`
+- cancels activity renewal and releases the native activity assertion
 - restores the previous screen saver idle timer
 
 Interrupted previous run:
@@ -60,6 +72,8 @@ Interrupted previous run:
 - lets you restore the saved value or keep the current setting
 
 NoDoze uses the current user's current-host screen saver preference only. It does not install a background service.
+
+Apple's [`caffeinate` source](https://github.com/apple-oss-distributions/PowerManagement/blob/main/caffeinate/caffeinate.c) sets a five-second default timeout for `-u`; `-w` does not extend it. The native [`IOPMAssertionDeclareUserActivity` API](https://developer.apple.com/documentation/iokit/1557127-iopmassertiondeclareuseractivity) supports renewing the returned assertion to report continued activity.
 
 ## Build
 
@@ -71,6 +85,7 @@ cp .build/release/NoDoze dist/NoDoze.app/Contents/MacOS/NoDoze
 cp Info.plist dist/NoDoze.app/Contents/Info.plist
 cp Resources/NoDoze.icns dist/NoDoze.app/Contents/Resources/NoDoze.icns
 chmod +x dist/NoDoze.app/Contents/MacOS/NoDoze
+xattr -cr dist/NoDoze.app
 codesign --force --deep --sign - dist/NoDoze.app
 codesign --verify --deep --strict dist/NoDoze.app
 ```
@@ -81,9 +96,25 @@ codesign --verify --deep --strict dist/NoDoze.app
 open dist/NoDoze.app
 ```
 
+## Tests
+
+With Xcode selected as the developer directory:
+
+```sh
+swift test -c release
+```
+
+If Command Line Tools is selected and XCTest is unavailable, use:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test -c release
+```
+
+Preference tests use separate temporary domains; they do not change your screen saver settings.
+
 ## Privacy
 
-NoDoze has no telemetry, no analytics, no network calls, and no background service. It only starts `/usr/bin/caffeinate` and temporarily changes the current-host screen saver idle timer while running.
+NoDoze has no telemetry, no analytics, no network calls, and no background service. It starts `/usr/bin/caffeinate`, maintains a native power-management activity assertion, and temporarily changes the current-host screen saver idle timer while running. It does not simulate keyboard or mouse input or require Accessibility access.
 
 ## License
 

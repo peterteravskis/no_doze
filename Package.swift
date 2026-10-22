@@ -11,6 +11,7 @@ let package = Package(
         .executable(name: "NoDoze", targets: ["NoDoze"])
     ],
     targets: [
-        .executableTarget(name: "NoDoze")
+        .executableTarget(name: "NoDoze"),
+        .testTarget(name: "NoDozeTests", dependencies: ["NoDoze"])
     ]
 )

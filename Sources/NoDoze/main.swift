@@ -27,6 +27,7 @@ enum NoDozeError: LocalizedError {
     case preferenceSyncFailed
     case caffeinateUnavailable
     case pendingScreenSaverRecovery
+    case activityAssertionFailed(Int32)
 
     var errorDescription: String? {
         switch self {
@@ -36,6 +37,8 @@ enum NoDozeError: LocalizedError {
             return "Could not find /usr/bin/caffeinate."
         case .pendingScreenSaverRecovery:
             return "Restore or keep the interrupted screen saver setting before starting NoDoze."
+        case .activityAssertionFailed(let code):
+            return "macOS could not keep this session active (IOKit error \(code))."
         }
     }
 }
@@ -134,7 +137,26 @@ private final class DialView: NSControl {
 
     private func commonInit() {
         translatesAutoresizingMaskIntoConstraints = false
+        setAccessibilityElement(true)
         setAccessibilityRole(.button)
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard isEnabled, mode == .timer else { return false }
+        timerNumberClicked?()
+        return true
+    }
+
+    override func accessibilityPerformIncrement() -> Bool {
+        guard isEnabled, mode == .clock24 else { return false }
+        clockMinuteChanged?((stopMinuteOfDay + 15) % 1_440)
+        return true
+    }
+
+    override func accessibilityPerformDecrement() -> Bool {
+        guard isEnabled, mode == .clock24 else { return false }
+        clockMinuteChanged?((stopMinuteOfDay + 1_440 - 15) % 1_440)
+        return true
     }
 
     override var intrinsicContentSize: NSSize {
@@ -424,9 +446,16 @@ private final class TimerTextControl: NSControl {
     private func commonInit() {
         translatesAutoresizingMaskIntoConstraints = false
         focusRingType = .none
+        setAccessibilityElement(true)
         setAccessibilityRole(.textField)
         setAccessibilityLabel("Stop timer minutes")
         setAccessibilityValue("\(minutes) minutes")
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard isEnabled else { return false }
+        beginEditing(selectAll: true)
+        return true
     }
 
     func beginEditing(selectAll: Bool = true) {
@@ -730,7 +759,7 @@ private final class TimerTextControl: NSControl {
 private final class OrangeToggle: NSControl {
     var state: NSControl.StateValue = .off {
         didSet {
-            setAccessibilityValue(state == .on ? "on" : "off")
+            setAccessibilityValue(state == .on ? 1 : 0)
             needsDisplay = true
         }
     }
@@ -760,7 +789,15 @@ private final class OrangeToggle: NSControl {
 
     private func commonInit() {
         translatesAutoresizingMaskIntoConstraints = false
-        setAccessibilityRole(.button)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.checkBox)
+        setAccessibilityValue(0)
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard isEnabled else { return false }
+        toggle()
+        return true
     }
 
     override func updateTrackingAreas() {
@@ -837,6 +874,7 @@ private final class OrangeToggle: NSControl {
     }
 
     private func toggle() {
+        guard isEnabled else { return }
         state = state == .on ? .off : .on
         sendAction(action, to: target)
     }
@@ -1284,7 +1322,7 @@ private final class ScreenSaverRecoverySheetController: NSWindowController {
     }
 }
 
-private struct ScreenSaverIdleState {
+struct ScreenSaverIdleState: Equatable {
     let wasSet: Bool
     let seconds: Int?
 
@@ -1336,22 +1374,27 @@ private struct ScreenSaverIdleState {
     }
 }
 
-private struct ScreenSaverRecoveryDetails {
+struct ScreenSaverRecoveryDetails {
     let currentState: ScreenSaverIdleState
     let restoreState: ScreenSaverIdleState
 }
 
 final class ScreenSaverController {
-    private let domain = "com.apple.screensaver" as CFString
+    private let domain: CFString
     private let key = "idleTime" as CFString
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private let pendingRestoreKey = "ScreenSaverIdleTimerRestorePending"
     private let savedIdleTimeWasSetKey = "ScreenSaverIdleTimerWasSet"
     private let savedIdleTimeSecondsKey = "ScreenSaverIdleTimerSeconds"
     private var savedIdleState: ScreenSaverIdleState?
     private var captured = false
 
-    fileprivate var pendingRestoreDetails: ScreenSaverRecoveryDetails? {
+    init(domain: CFString = "com.apple.screensaver" as CFString, defaults: UserDefaults = .standard) {
+        self.domain = domain
+        self.defaults = defaults
+    }
+
+    var pendingRestoreDetails: ScreenSaverRecoveryDetails? {
         guard let restoreState = pendingRestoreState() else { return nil }
         guard restoreState.needsCrashRecovery else {
             clearPersistentRestore()
@@ -1364,11 +1407,13 @@ final class ScreenSaverController {
         )
     }
 
-    fileprivate var hasPendingInterruptedRestore: Bool {
+    var hasPendingInterruptedRestore: Bool {
         pendingRestoreDetails != nil
     }
 
     func disable() throws {
+        guard !captured else { return }
+
         if let pendingState = pendingRestoreState() {
             guard !pendingState.needsCrashRecovery else {
                 throw NoDozeError.pendingScreenSaverRecovery
@@ -1407,7 +1452,7 @@ final class ScreenSaverController {
         clearCurrentRestoreState()
     }
 
-    fileprivate func restorePendingInterruptedState(_ state: ScreenSaverIdleState) throws {
+    func restorePendingInterruptedState(_ state: ScreenSaverIdleState) throws {
         try apply(state)
         clearPersistentRestore()
     }
@@ -1417,6 +1462,8 @@ final class ScreenSaverController {
     }
 
     private func currentIdleState() -> ScreenSaverIdleState {
+        // Capture the latest value, including edits made outside this process.
+        CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesCurrentHost)
         let currentValue = CFPreferencesCopyValue(
             key,
             domain,
@@ -1493,53 +1540,6 @@ final class ScreenSaverController {
     }
 }
 
-final class CaffeinateController {
-    private var process: Process?
-    private var stopping = false
-    var didExitUnexpectedly: (() -> Void)?
-
-    var isRunning: Bool {
-        process?.isRunning == true
-    }
-
-    func start() throws {
-        guard !isRunning else { return }
-        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/caffeinate") else {
-            throw NoDozeError.caffeinateUnavailable
-        }
-
-        let newProcess = Process()
-        newProcess.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
-        newProcess.arguments = ["-dimsu", "-w", "\(getpid())"]
-        newProcess.standardOutput = Pipe()
-        newProcess.standardError = Pipe()
-        newProcess.terminationHandler = { [weak self] _ in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                if !self.stopping {
-                    self.process = nil
-                    self.didExitUnexpectedly?()
-                }
-                self.stopping = false
-            }
-        }
-
-        try newProcess.run()
-        process = newProcess
-    }
-
-    func stop() {
-        guard let currentProcess = process else { return }
-        stopping = true
-
-        if currentProcess.isRunning {
-            currentProcess.terminate()
-        }
-
-        process = nil
-    }
-}
-
 private struct StopDeadline {
     let date: Date
     let reason: String
@@ -1548,6 +1548,7 @@ private struct StopDeadline {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let screenSaver = ScreenSaverController()
     private let caffeinate = CaffeinateController()
+    private let userActivity = UserActivityController()
 
     private var window: NSWindow!
     private var statusItem: NSStatusItem?
@@ -1603,12 +1604,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         caffeinate.didExitUnexpectedly = { [weak self] in
             guard let self else { return }
+            self.userActivity.stop()
             self.active = false
             self.cancelAutoStopTimers()
             try? self.screenSaver.restore()
             self.lastStatusText = "Stopped unexpectedly"
             self.refreshUI()
             self.showAlert(message: "caffeinate stopped unexpectedly.")
+        }
+
+        userActivity.didFail = { [weak self] error in
+            guard let self else { return }
+            self.stop(statusText: "Stopped unexpectedly")
+            self.showAlert(message: error.localizedDescription)
         }
 
         promptForInterruptedScreenSaverRestoreIfNeeded()
@@ -1820,6 +1828,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func configureDurationControls() {
         styleToggle(durationToggle, label: durationTitleLabel)
+        durationToggle.setAccessibilityLabel("Enable stop timer")
         durationToggle.target = self
         durationToggle.action = #selector(durationToggleChanged)
 
@@ -1838,6 +1847,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func configureWallClockControls() {
         styleToggle(wallClockToggle, label: wallClockTitleLabel)
+        wallClockToggle.setAccessibilityLabel("Enable wall clock stop")
         wallClockToggle.target = self
         wallClockToggle.action = #selector(wallClockToggleChanged)
 
@@ -1975,6 +1985,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             try screenSaver.disable()
             try caffeinate.start()
+            try userActivity.start()
 
             active = true
             lastStatusText = "Running"
@@ -1983,6 +1994,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             scheduleAutoStop()
             refreshUI()
         } catch {
+            userActivity.stop()
             caffeinate.stop()
             cancelAutoStopTimers()
             try? screenSaver.restore()
@@ -1995,6 +2007,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func stop(statusText: String) {
         cancelAutoStopTimers()
+        userActivity.stop()
         caffeinate.stop()
         do {
             try screenSaver.restore()
@@ -2017,9 +2030,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if let autoStopDeadline {
             let interval = max(0.5, autoStopDeadline.timeIntervalSinceNow)
-            autoStopTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
                 self?.stopAutomatically()
             }
+            autoStopTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
         }
     }
 

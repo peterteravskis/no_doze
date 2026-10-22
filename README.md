@@ -5,7 +5,7 @@
 
   <p><strong>A tiny macOS keep-awake app for AI agents, desktop automation, browser automation, and long-running local work.</strong></p>
 
-  <img src="Resources/NoDoze-v1.1-screenshot.png" alt="NoDoze v1.1 macOS keep awake app with an armed wall-clock stop dial" width="900">
+  <img src="Resources/NoDoze-v1.2-macOS27-screenshot.png" alt="NoDoze v1.2 on macOS 27.0.1 with an armed wall-clock stop dial" width="900">
 </div>
 
 NoDoze is a small Swift/AppKit macOS app for keeping your Mac awake while coding agents, computer-use agents, tests, builds, browsers, and other unattended workflows are running.
